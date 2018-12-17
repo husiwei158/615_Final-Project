@@ -269,7 +269,7 @@ Votes followes the benfold's distribution.
 
 We can know that no significant cheat behaviors were found in vote data of imdb movies. 
 
----
+
 ##{.bigger}
 <div class="centered">
 Thank you
