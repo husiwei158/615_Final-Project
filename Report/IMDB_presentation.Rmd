@@ -1,0 +1,278 @@
+---
+title: "IMDB Presentation"
+author: "Siwei Hu"
+date: "December 14, 2018"
+output: 
+  ioslides_presentation:
+    widescreen: true
+    incremental: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(magrittr)
+library(readr)
+library(scales)
+library(knitr)
+library(leaflet)
+library(geojsonio)
+library(moments)
+library(benford.analysis)
+library(plotly)
+library(gridExtra)
+```
+
+##Abstract{.smaller}
+
+
+Movie is one of the most important entertainment ways in our daily life. I find a movie dataset, including 7 thousand+ movies, that scraped from Internet Movie Database (aka IMDB). 
+I’m interested in several topics includes genres, movie budget & gross, geographic movie distribution, rating distribution and IMDB scores & votes. 
+
+I check the relationship between them and get several findings. 
+First, movie industry is becoming more and more important. 
+Second, high budget movie does not mean high earning. 
+Third, USA can be defined as movie center in this world. 
+Fourth, R rating movies were pictured more than others. 
+Fifth, Score distribution is not follow the normal distribution. 
+Finally, votes data follows the Benfold distribution. This helped us figure out that the scores in imdb deserve our believe.
+
+#Introduction:
+
+##I. Background
+
+Internet Movie database is one of the most useful movie website to help us rate which movie deserve to watch. 
+
+It includes films, television programs, home videos and video games, and internet streams, including cast, production crew and personnel biographies, plot summaries, trivia, and fan reviews and ratings.
+
+As a very famous website, imdb can be a very good project to make me do some anaylsis for movies on it.  
+
+##II. data source
+
+I get a dataset includes nearly 7000 movies from a kaggle data challenge. Data in this data set comes from imdb.com. The author scraped data from imdb. 
+
+In the data set,it has budget,company,country,director,genre,gross,name,rating,
+released,runtime,score,star,votes,writer,year.
+
+```{r,echo=FALSE,message=FALSE}
+imdb <- read_csv("movies.csv")
+options("scipen"=100, "digits"=4)
+```
+
+#EDA:
+
+##Attitude to genres {.smaller}
+> - Traditional themes were falling:
+see the curve of drama, musical, Romance and Thriller.
+
+> - Scientific theme was rasing:
+After 2000, more and more sci-fi and superhero theme were pictured.
+
+```{r, echo = FALSE,message=FALSE}
+ggplot(data = imdb) + geom_density(aes(x = year, color = genre))+
+  geom_density(aes(x = year),linetype = "dashed" ) + labs(x= "Year",y= "Movie Genres Density", title = "The distribution of proportion of different genres from 1986 ~ 2016 ") +  theme(axis.title.x = element_text(size = 12),axis.title.y = element_text(size = 12), legend.title = element_text(size =18))
+
+```
+
+##Big Companies'Budget planning {.smaller}
+> - linear relationship between Time and Budget:
+
+From plot, the budget becomes higher along with time.
+
+```{r, echo = FALSE}
+imdb.budget <- imdb %>% dplyr::select(budget, year) %>% filter(budget != 0) 
+imdb.budget$interval <- ifelse(imdb.budget$year >= 1986& imdb.budget$year < 1991,"89",ifelse(imdb.budget$year >= 1991&imdb.budget$year < 1996,"94",ifelse(imdb.budget$year >= 1996&imdb.budget$year < 2001,"00",ifelse(imdb.budget$year >= 2001&imdb.budget$year < 2006,"04",ifelse(imdb.budget$year >= 2006&imdb.budget$year < 2011,"09","14" ) ) )) )
+
+position <- c("89","94","00","04","09","14")
+table.budget <- imdb.budget %>% group_by(year) %>% summarise(Average = mean(budget),Max= max(budget))
+
+
+q<-ggplot(data = imdb.budget)+ geom_jitter(aes(x = year, y = budget)) + scale_y_continuous(labels = comma) + labs(x = "Year Interval", y = "Movie Budget", title = "The Changes of Movie Budget Every Five Years") +  theme(axis.title.x = element_text(size = 12),axis.title.y = element_text(size = 12), plot.title = element_text(size = 15, face = "bold"))
+
+w<- ggplot(data = table.budget)+ geom_point(aes(x = year, y = Average,color = Average,size = Max))+scale_color_continuous(trans = "reverse") + labs(x = "Year Interval", y = "Average Movie Budget", title = "Average and Maximum Movie Budget Every Five Years") +  theme(axis.title.x = element_text(size = 12),axis.title.y = element_text(size = 12), plot.title = element_text(size = 15, face = "bold"))
+
+grid.arrange(grobs = list(q,w))
+``` 
+
+##Effect of high Budget planning
+> - risk and earning both exist
+
+```{r, warning=FALSE,echo=FALSE}
+
+comp <- imdb %>% arrange(desc(budget))
+comp <- comp[1:100,] 
+comp1 <- comp %>%  group_by(company,year) %>% summarise(budget = sum(budget)) %>% ungroup() %>% mutate(n =1 ) %>% group_by(company) %>% mutate(count = sum(n)) %>% filter(count !=1 )
+
+comp2 <- comp %>% group_by(company, year) %>% summarise(gross = sum(gross)) %>%  ungroup() %>% mutate(n =1 ) %>% group_by(company) %>% mutate(count = sum(n)) %>% filter(count !=1 )
+
+year <- c(95, 97, 04 ,05 ,06, 07, 08, 09 ,10, 11, 12 ,13, 14 ,15 ,16)
+
+ggplot(data = comp1)+ geom_line(aes(x = year,y = budget,color = "red")) + geom_line(aes(x = comp2$year, y = comp2$gross,color = "blue")) +  facet_wrap(~company) +scale_color_manual(labels = c( "gross","budget"), values = c("red", "blue")) + labs(x = "Year", y = "Budget&Gross", title = "Top 100 high budget Movies with Gross",colour ="Type of Money")+ scale_y_continuous(labels = comma) +theme(axis.title.x = element_text(size = 12),axis.title.y = element_text(size = 12), plot.title = element_text(size = 15, face = "bold"), axis.text.x = element_text(angle = 45))
+```
+
+##How big companies perform?
+> -  Big Companies has methods to keep rich
+
+```{r, echo=FALSE}
+comp3 <- imdb %>% filter(company == "Columbia Pictures"|company == "DreamWorks Animation"|company == "FortyFour Studios"|company == "Lucasfilm"|company == "Marvel Studios"|company == "Metro-Goldwyn-Mayer (MGM)"|company == "New Line Cinema"|company == "Paramount Pictures"|company == "Pixar Animation Studios"|company == "Roth Films"|company == "Twentieth Century Fox Film Corporation"|company == "Universal Pictures"|company == "Walt Disney Animation Studios"|company == "Walt Disney Pictures"|company == "Warner Bros.")
+
+comp4 <- comp3 %>% group_by(company,year) %>% summarise(budget = sum(budget))
+comp5 <- comp3  %>% group_by(company,year) %>% summarise(gross = sum(gross))
+
+
+ggplot(data = comp4)+ geom_line(aes(x = year,y = budget,color = "red")) + geom_line(aes(x = comp5$year, y = comp5$gross,color = "blue")) +  facet_wrap(~company) +scale_color_manual(labels = c( "gross","budget"), values = c("red", "blue")) + labs(x = "Year", y = "Budget&Gross", title = "Budget VS Gross",colour ="Type of Money")+ scale_y_continuous(labels = comma) +theme(axis.title.x = element_text(size = 12),axis.title.y = element_text(size = 12), plot.title = element_text(size = 15, face = "bold"), axis.text.x = element_text(angle = 45))
+```
+
+##Which country is the movie center?{.smaller}
+
+> - Hollywood : 
+hollywood and the biggest movie companies are in the America. 
+> - Superhero :
+The audiences are attracted by the Superhero theme.
+```{r, echo=FALSE,message=FALSE,warning = FALSE}
+
+ imdb.map <- read_csv("imdb.map.csv")
+ wm <- geojsonio::geojson_read("WorldMap.geo.json", what = "sp")
+ wm@data <- left_join(wm@data,imdb.map, by ="name")
+
+ ## Leaflet Map
+  bins <- c(1,5,10,25,50,100,200,300,1000,Inf)
+  pal <- colorBin("YlGnBu", domain = wm@data$count, bins = bins)
+
+  leaflet(wm) %>%
+   setView(41.5,12.6,2) %>%
+   addTiles() %>%
+   addPolygons(stroke = FALSE, smoothFactor = 0.3, fillOpacity = 1,
+     fillColor = ~pal(count),
+    label = ~paste0("Movies made by ",name, ":", formatC(count))) %>%       addLegend(pal = pal,title = "# of Movies", values = ~count, opacity = 1.0)
+
+
+```
+
+##Rating ratio{.smaller .build}
+###a. Will the audiences'flavor vary with year?
+
+The density plot displays a decreasing trend of density of PG. From 1986 to 2005, pg-13 shows a increasing trend and then it shows a decreasing trend from 2006 to 2016. R rating keeps same.
+
+```{r, echo=FALSE}
+imdb.rating <- imdb %>% filter(rating == "PG"|rating == "PG-13"|rating == "R") 
+
+imdb.rv <- imdb.rating %>% group_by(year,rating) %>% mutate(allvote = sum(votes)) %>% ungroup() %>% group_by(year,rating,allvote) %>% summarise(count = n()) %>% mutate(average = allvote/count)
+
+imdb.rs <- imdb.rating %>% group_by(year,rating) %>% mutate(allscore = sum(score)) %>% ungroup() %>% group_by(year,rating,allscore) %>% summarise(count = n()) %>% mutate(average = allscore/count)
+
+q <- ggplot(data = imdb.rating)+ geom_bar(aes(x = year,fill = rating),position = "fill")+ labs(x = "Year", y = "Oroportion of three Movie Types", title = "The ratio of three movie types each year") +  theme(axis.title.x = element_text(size = 8),axis.title.y = element_text(size = 8), plot.title = element_text(size =8,face = "bold"))
+
+w <- ggplot(data = imdb.rating) + geom_density(aes(x = year,color = rating))+ labs(x = "Year", y = "density of three Movie Types", title = "The density of three movie types each year") +  theme(axis.title.x = element_text(size = 8),axis.title.y = element_text(size = 8), plot.title = element_text(size = 8, face = "bold"))
+
+e <- ggplot(data = imdb.rv) + geom_bar(aes(x = rating,y = average, fill = "red"),show.legend = F, stat = "identity")+labs(x = "Rating", y = "Voters per movie") +  theme(axis.title.x = element_text(size = 12),axis.title.y = element_text(size = 12), plot.title = element_text(size = 15, face = "bold"))
+
+r <- ggplot(data = imdb.rs) + geom_bar(aes(x = rating,y = average ),fill = "#0099FF", stat = "identity")+labs(x = "Rating", y = "Score per movie") +   theme(axis.title.x = element_text(size = 12),axis.title.y = element_text(size = 12), plot.title = element_text(size = 15, face = "bold"))
+
+grid.arrange(grobs = list(q,w))
+```
+
+##Rating ratio{.smaller .build}
+###b. people's attitude to three ratings
+From plots, it's clear to see from voter distribution for three rating. 
+More people are willing to vote for PG-13 movies. 
+
+```{r, echo=FALSE}
+grid.arrange(grobs = list(e,r))
+
+```
+
+##How long movie can earn most?
+
+>- Runtime from 125 to 150 minutes have a significant higher earning than other runtime.
+
+```{r, echo=FALSE,message=FALSE}
+##Year vs runtime
+imdb.length <- imdb  %>% dplyr::select(runtime,year,gross,budget,released)%>% filter(budget != 0 &gross != 0) %>% mutate(earning = gross - budget)
+
+
+ggplot(data = imdb.length) + geom_smooth(aes(x= runtime, y = budget,color = "budget"))+geom_smooth(aes(x= runtime, y = gross,color = "gross"))+ labs(x = "Movie Length", y = "Amount of Money", title = "Budget and Gross Vs Movie Length")+ scale_color_manual(breaks= c("budget","gross"),values = c("red","green")) +theme(axis.title.x = element_text(size = 12),axis.title.y = element_text(size = 12), plot.title = element_text(size = 15, face = "bold"))
+```
+
+# Check Distribution
+
+##I. Normal Distribution{.smaller}
+### Plot the distribution
+>- Score is skewness distribution. 
+-The skewness here is -0.63(Left skewness) 
+-the Kurtosis is 3.97(leptokurtic).
+
+```{r,echo=FALSE}
+imdb.score <- imdb %>% dplyr::select(score,votes,genre,company,rating)  %>% filter(rating == "PG"|rating == "PG-13"|rating == "R")
+
+p <- ggplot(imdb.score,aes(x = score)) + geom_histogram(aes(y = ..density..),fill = "red",alpha = 0.5, bins = 100,show.legend = FALSE)+ geom_density(color = "blue")+ labs(x = "Movie Score", y = "Density of Movies", title = "Distribution of Movie Score")+ theme(axis.title.x = element_text(size = 12),axis.title.y = element_text(size = 12), plot.title = element_text(size = 15, face = "bold"))
+
+p + annotate("text",x=3.5,y=0.4,label = "Skewness = -0.634, kurtosis = 3.97") +annotate("text",x=3.5,y=0.3,label = "Skewness Distribution")
+
+skewness(imdb.score$score)
+kurtosis(imdb.score$score)
+
+```
+
+
+##II. Implication for score distribution
+The reason caused this skewness is that people are more willing to give a comparable higher score. 
+In our normal idea, people think 5.0 is a bad score but not a normal level. This caused the skewness.
+
+# Benfold's Law
+
+##I.introduction{.smaller}
+
+Benford's law is an observation about the frequency distribution of leading digits in many real-life sets of numerical data. The law states that in many naturally occurring collections of numbers, the leading significant digit is likely to be small.
+The second-order test looks at relationships and patterns in data and is based on the digits of the differences between amounts that have been sorted from smallest to largest (ordered). 
+The digit patterns of the differences are expected to closely approximate the digit frequencies of Benford's Law.
+The summation test looks for excessively large numbers in the data.
+
+```{r,echo=FALSE,message=FALSE}
+b <- ggplot(data = imdb.score)+geom_histogram(aes(x = votes),bins = 100, color = "blue")
+
+ggplotly(b)
+```
+
+##II. Check Votes Data{.smaller}
+
+From two digits distribution, the 2 digits of votes follow benfold's distribution. Only a few two digits has slightly higher than benford distribution. This also shows in the suspects_ranked dataset.The biggest absolute difference is 32 which is small.In conclusion, There is no significant dispendency number.
+
+The higest chi-square between observed 2 digits frequence and expected frequence is 4, which is small. This proves that the frequency of observed 2-digit number are close to what they expected.
+
+```{r,echo=FALSE}
+
+
+bfd.voter <- benford(imdb.score$votes, number.of.digits = 2)
+plot(bfd.voter)
+
+```
+
+##III. Suspecious data
+
+Used 'getSuspects' function, we can see suspicious observations from the original data. There exist 393 out of 6338 suspicious observations.
+
+we can see suspects rank. The highest absolute difference is only 32.35 which is small. So i think the Votes followed the benfold distribution,
+
+```{r,echo=FALSE}
+suspects_ranked <- suspectsTable(bfd.voter)
+
+kable(head(suspects_ranked))
+
+n <- getSuspects(bfd.voter,imdb.score)
+
+```
+
+##IV. Implication
+
+Votes followes the benfold's distribution. 
+
+We can know that no significant cheat behaviors were found in vote data of imdb movies. 
+
+
+##{.bigger}
+<div class="centered">
+Thank you
+
+Any Question?
+</div>
